@@ -39,13 +39,17 @@ def find_websites_in_text(text, pattern, domain_endings):
     return websites
 
 
-def find_websites(folder="downloaded"):
+def find_websites(folder="downloaded", exclude_paths=None):
     domain_endings = load_domain_endings()
     sure = set()
     maybe = set()
+    excluded = {
+        Path(path).resolve()
+        for path in (exclude_paths or [])
+    }
 
     for file_path in Path(folder).rglob("*"):
-        if not file_path.is_file():
+        if not file_path.is_file() or file_path.resolve() in excluded:
             continue
 
         text = file_path.read_text(errors="ignore")
@@ -62,9 +66,31 @@ def find_websites(folder="downloaded"):
     return sorted(sure), sorted(maybe)
 
 
+def format_results(sure, maybe):
+    lines = [f"=== {len(sure)} websites (found in links and emails) ==="]
+    lines.extend(sure)
+    lines.extend([
+        "",
+        f"=== {len(maybe)} maybe websites (bare names in quotes, check by eye) ===",
+    ])
+    lines.extend(maybe)
+    return "\n".join(lines) + "\n"
+
+
+def write_results(sure, maybe, output_file="websites.txt"):
+    output_path = Path(output_file)
+    if output_path.suffix.lower() != ".txt":
+        output_path = output_path.with_suffix(output_path.suffix + ".txt")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists():
+        output_path.unlink()
+    output_path.write_text(format_results(sure, maybe))
+    return output_path
+
+
 if __name__ == "__main__":
-    # python find_sites.py wfix.fun           -> reads downloaded/wfix.fun/, writes downloaded/wfix.fun.txt
-    # python find_sites.py wfix.fun myfolder  -> reads myfolder/wfix.fun/,   writes myfolder/wfix.fun.txt
+    # python find_sites.py wfix.fun           -> reads downloaded/wfix.fun/, writes downloaded/wfix.fun/websites.txt
+    # python find_sites.py wfix.fun myfolder  -> reads myfolder/wfix.fun/,   writes myfolder/wfix.fun/websites.txt
     if len(sys.argv) < 2:
         sys.exit("usage: python find_sites.py <site_name> [downloads_folder]")
 
@@ -81,18 +107,7 @@ if __name__ == "__main__":
     if not site_folder.is_dir():
         sys.exit(f"{site_folder} not found; run: python grab.py {site_name}")
 
-    sure, maybe = find_websites(site_folder)
-
-    # Saved next to the site's folder (not inside it), so it never gets scanned itself.
-    output_file = Path(downloads_folder, site_name + ".txt")
-    with open(output_file, "w") as file:
-        file.write(f"=== {len(sure)} websites (found in links and emails) ===\n")
-        for website in sure:
-            file.write(website + "\n")
-
-        file.write("\n")
-        file.write(f"=== {len(maybe)} maybe websites (bare names in quotes, check by eye) ===\n")
-        for website in maybe:
-            file.write(website + "\n")
-
-    print(f"{len(sure)} websites and {len(maybe)} maybe websites saved to {output_file.resolve()}")
+    output_file = site_folder / "websites.txt"
+    sure, maybe = find_websites(site_folder, exclude_paths=[output_file])
+    output_path = write_results(sure, maybe, output_file)
+    print(f"{len(sure)} websites and {len(maybe)} maybe websites saved to {output_path.resolve()}")

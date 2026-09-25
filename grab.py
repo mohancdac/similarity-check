@@ -1,4 +1,5 @@
 import sys
+import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -66,16 +67,67 @@ def save_file(url, content, site_folder):
     return file_path
 
 
-def grab(url, output_folder="downloaded"):
-   
+def site_name(url):
+    if "://" not in url:
+        url = "https://" + url
+    return urlparse(url).netloc.replace(":", "_")
 
+
+def reset_output_folder(output_folder, url=None):
+    output_path = Path(output_folder)
+    if url is not None:
+        output_path = output_path / site_name(url)
+
+    if output_path.is_dir():
+        shutil.rmtree(output_path)
+    elif output_path.exists():
+        output_path.unlink()
+    output_path.mkdir(parents=True, exist_ok=True)
+    return output_path
+
+
+class ResponseRecorder:
+    def __init__(self, output_folder, url):
+        self.site_folder = Path(output_folder) / site_name(url)
+        self.responses = []
+        self.saved_count = 0
+
+    def attach(self, page):
+        page.on("response", self._remember_response)
+
+    def _remember_response(self, response):
+        self.responses.append(response)
+
+    def save_new_responses(self, phase):
+        saved_files = []
+        responses = self.responses[self.saved_count:]
+        self.saved_count = len(self.responses)
+
+        for response in responses:
+            if urlparse(response.url).scheme not in {"http", "https"}:
+                continue
+
+            try:
+                content = response.body()
+                file_path = save_file(response.url, content, self.site_folder)
+            except Exception as error:
+                print(f"skip {response.url}: {error}")
+                continue
+
+            saved_files.append(file_path)
+            print(f"saved ({phase}) {file_path}")
+
+        print(f"{len(saved_files)} files saved for {phase}")
+        return saved_files
+
+
+def grab(url, output_folder="downloaded"):
     if "://" not in url:
         url = "https://" + url
 
     # Each site gets its own folder: downloaded/wfix.fun/...
     # (":" is replaced like in local_path, e.g. "localhost:8000" -> "localhost_8000")
-    site_name = urlparse(url).netloc.replace(":", "_")
-    site_folder = Path(output_folder, site_name)
+    site_folder = Path(output_folder, site_name(url))
 
     saved_files = []
 
@@ -138,7 +190,6 @@ def grab(url, output_folder="downloaded"):
 
 
 if __name__ == "__main__":
- 
     if len(sys.argv) < 2:
         sys.exit("usage: python grab.py <url> [output_folder]")
 
@@ -150,3 +201,11 @@ if __name__ == "__main__":
         output_folder = "downloaded"
 
     grab(url, output_folder)
+
+    from find_sites import find_websites, write_results
+
+    site_folder = Path(output_folder, site_name(url))
+    output_file = site_folder / "websites.txt"
+    sure, maybe = find_websites(site_folder, exclude_paths=[output_file])
+    output_path = write_results(sure, maybe, output_file)
+    print(f"Results written to {output_path.resolve()}")

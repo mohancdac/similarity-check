@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 
 OMNIPARSER_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "OmniParser")
@@ -18,11 +19,20 @@ CAPTION_MODEL_PATH = os.path.join(
 VIEWPORT = {"width": 1280, "height": 800}
 BOX_THRESHOLD = 0.05
 
-SCREENSHOT_PATH = "current_screenshot.png"
-BEFORE_CLICK_PATH = "before_click.png"
-AFTER_CLICK_PATH = "after_click.png"
-LABELED_SCREENSHOT_PATH = "labeled_screenshot.png"
-PARSED_JSON_PATH = "parsed_content.json"
+SCREENSHOT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "screenshots")
+)
+SCREENSHOT_DIR = os.path.join(
+    SCREENSHOT_ROOT,
+    datetime.now().strftime("%Y%m%d_%H%M%S_%f"),
+)
+os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+
+SCREENSHOT_PATH = os.path.join(SCREENSHOT_DIR, "current_screenshot.png")
+BEFORE_CLICK_PATH = os.path.join(SCREENSHOT_DIR, "before_click.png")
+AFTER_CLICK_PATH = os.path.join(SCREENSHOT_DIR, "after_click.png")
+LABELED_SCREENSHOT_PATH = os.path.join(SCREENSHOT_DIR, "labeled_screenshot.png")
+PARSED_JSON_PATH = os.path.join(SCREENSHOT_DIR, "parsed_content.json")
 
 LOGIN_TRIGGER_KEYWORDS = [
     "log",

@@ -58,8 +58,8 @@ class OmniParserClient:
         self._step_counter += 1
         prefix = f"{self._step_counter:02d}_{step_name}"
 
-        labeled_path = f"{prefix}_labeled.png"
-        json_path = f"{prefix}_parsed.json"
+        labeled_path = os.path.join(config.SCREENSHOT_DIR, f"{prefix}_labeled.png")
+        json_path = os.path.join(config.SCREENSHOT_DIR, f"{prefix}_parsed.json")
 
         with open(labeled_path, "wb") as f:
             f.write(base64.b64decode(labeled_img_b64))

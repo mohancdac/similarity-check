@@ -192,8 +192,8 @@ def _type_and_confirm_identifier(browser, field, identifier_value):
 
     confirm_bbox_px = _typing_confirmation_bbox(field, img_w, img_h)
 
-    before_type_path = "before_type_identifier.png"
-    after_type_path = "after_type_identifier.png"
+    before_type_path = str(Path(config.SCREENSHOT_DIR) / "before_type_identifier.png")
+    after_type_path = str(Path(config.SCREENSHOT_DIR) / "after_type_identifier.png")
 
     browser.screenshot(before_type_path)
     browser.type_text(identifier_value)
@@ -407,8 +407,8 @@ def _confirm_password_after_tab(browser, pw_field, password_value, parsed_conten
     print("[+] Pressing Tab to move from identifier to password field.")
     browser.tab_to_field("forward")
 
-    before_type_path = "before_type_password.png"
-    after_type_path = "after_type_password.png"
+    before_type_path = str(Path(config.SCREENSHOT_DIR) / "before_type_password.png")
+    after_type_path = str(Path(config.SCREENSHOT_DIR) / "after_type_password.png")
 
     browser.screenshot(before_type_path)
     browser.type_text(password_value)

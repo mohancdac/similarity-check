@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 
@@ -39,11 +40,42 @@ def local_path(url, output_folder):
     return Path(output_folder, site_folder, *folders_and_file)
 
 
+def save_file(url, content, site_folder):
+    """Save the content of a URL under site_folder and return the path it was saved to."""
+    file_path = local_path(url, site_folder)
+    try:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_bytes(content)
+        return file_path
+    except OSError:
+        pass
+
+    # A URL can be both a file and a folder, for example:
+    #   /books/site.co               -> a file called "site.co"
+    #   /books/site.co/contact-list  -> needs "site.co" to be a folder
+    # Then save it as one flat file instead:  books_site.co_contact-list
+    parsed_url = urlparse(url)
+    flat_name = make_safe(parsed_url.path.strip("/"))
+    if parsed_url.query != "":
+        flat_name = flat_name + "_" + make_safe(parsed_url.query)
+    host_folder = parsed_url.netloc.replace(":", "_")
+
+    file_path = Path(site_folder, host_folder, flat_name[:200])
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(content)
+    return file_path
+
+
 def grab(url, output_folder="downloaded"):
    
 
     if "://" not in url:
         url = "https://" + url
+
+    # Each site gets its own folder: downloaded/wfix.fun/...
+    # (":" is replaced like in local_path, e.g. "localhost:8000" -> "localhost_8000")
+    site_name = urlparse(url).netloc.replace(":", "_")
+    site_folder = Path(output_folder, site_name)
 
     saved_files = []
 
@@ -59,8 +91,18 @@ def grab(url, output_folder="downloaded"):
 
         page.on("response", remember_response)
 
-        # Open the page and wait until nothing more is loading.
-        page.goto(url, wait_until="networkidle")
+        # Open the page and wait only until the HTML is ready and its scripts have started.
+        # Waiting for "load" would also wait for every image, and sites with big
+        # GIFs can take over 30 seconds for that, which made Playwright give up.
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+
+        # Then give everything else (scripts, images, lazy files) up to 30 seconds.
+        # Sites with slow images or live data (odds, chat) may never go fully quiet,
+        # so don't fail if they don't; just save what arrived.
+        try:
+            page.wait_for_load_state("networkidle", timeout=30000)
+        except PlaywrightTimeoutError:
+            print("page still loading after 30 seconds, saving what arrived so far")
 
         # Scroll to the bottom: some sites only load more files when you scroll.
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -72,14 +114,16 @@ def grab(url, output_folder="downloaded"):
             if scheme != "http" and scheme != "https":
                 continue
 
-            file_path = local_path(response.url, output_folder)
-
             try:
                 content = response.body()
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_bytes(content)
             except Exception as error:
-                # Happens for redirects (they have no content) and rare name clashes.
+                # Happens for redirects: they have no content.
+                print(f"skip {response.url}: {error}")
+                continue
+
+            try:
+                file_path = save_file(response.url, content, site_folder)
+            except OSError as error:
                 print(f"skip {response.url}: {error}")
                 continue
 
@@ -88,7 +132,7 @@ def grab(url, output_folder="downloaded"):
 
         browser.close()
 
-    full_folder_path = Path(output_folder).resolve()
+    full_folder_path = site_folder.resolve()
     print(f"{len(saved_files)} files saved under {full_folder_path}")
     return saved_files
 
